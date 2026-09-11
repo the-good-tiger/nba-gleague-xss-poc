@@ -117,6 +117,14 @@
           await displayJwt(jwt);
           return;
         }
+        const confirmed = body?.data?.confirmed ?? body?.confirmed ?? null;
+        status.textContent = confirmed === true
+          ? "Account linked, but token was absent from the poll response. Retrying…"
+          : confirmed === false
+            ? "Account link not confirmed yet. Retrying…"
+            : "Poll returned no confirmation or token. Retrying…";
+      } else {
+        status.textContent = `Poll returned HTTP ${response.status}. Retrying…`;
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
