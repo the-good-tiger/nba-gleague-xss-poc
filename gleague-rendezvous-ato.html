@@ -99,6 +99,7 @@
     copy.onclick = async () => navigator.clipboard.writeText(jwt);
     status.textContent = "Account token captured. Full JWT displayed and alerted.";
     status.className = "ok";
+    document.title = `JWT alert: ${jwt.length} bytes / ${jwt.split(".").length} segments`;
     sessionStorage.removeItem(SESSION_KEY);
     alert(jwt);
   }
